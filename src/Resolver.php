@@ -18,18 +18,32 @@ class Resolver implements Interfaces\Resolver
     /**
      * @var Interfaces\Validator Internal validator used to check input against expected types.
      */
-    protected $validator;
+    protected static $validator;
+
+    /**
+     * @param array $input
+     * @param mixed ...$args
+     *
+     * @return Resolver
+     */
+    public static function resolve(array $input = []): Interfaces\Resolver
+    {
+        return new static($input);
+    }
 
     /**
      * Resolver constructor.
      *
      * @param array $input The input data to be resolved.
      */
-    final public function __construct(array $input = [])
+    final public function __construct(array $input)
     {
-        $this->input     = $input;
-        $this->cache     = $this->cache();
-        $this->validator = $this->validator();
+        /* */
+        $this->input = $input;
+        $this->cache = $this->cache();
+
+        /* */
+        static::$validator = static::$validator ?? static::validator();
     }
 
     /**
@@ -43,7 +57,7 @@ class Resolver implements Interfaces\Resolver
     /**
      * @return Interfaces\Validator
      */
-    protected function validator(): Interfaces\Validator
+    protected static function validator(): Interfaces\Validator
     {
         return new Validator();
     }
@@ -69,7 +83,7 @@ class Resolver implements Interfaces\Resolver
      */
     protected function validate(string $path, $value, int $types): void
     {
-        if ( ! $this->validator->isValid($value, $types)) {
+        if ( ! static::$validator->isValid($value, $types)) {
             throw new Exceptions\ValidationException("Unexpected value at '$path'");
         }
     }
@@ -154,21 +168,6 @@ class Resolver implements Interfaces\Resolver
 
     /**
      * @param string $path
-     *
-     * @return mixed
-     *
-     * @throws Exceptions\MissingDataException
-     * @throws Exceptions\ValidationException
-     */
-    protected function resolve(string $path, int $types)
-    {
-        return $this->remember($path, function() use ($path, $types) {
-            return $this->evaluate($path, $types);
-        });
-    }
-
-    /**
-     * @param string $path
      * @param null   $default
      *
      * @return mixed|null
@@ -180,7 +179,9 @@ class Resolver implements Interfaces\Resolver
     {
         /* Resolve the path and input data, which also caches the value. */
         try {
-            return $this->resolve($path, $types);
+            return $this->remember($path, function() use ($path, $types) {
+                return $this->evaluate($path, $types);
+            });
 
         /* Allow the caller to specify a default if the data is missing. */
         } catch (Exceptions\MissingDataException $e) {
@@ -190,20 +191,6 @@ class Resolver implements Interfaces\Resolver
         }
 
         return $default;
-    }
-
-    /**
-     * @param string $path
-     * @param bool   $nullable
-     *
-     * @return array|null
-     *
-     * @throws Exceptions\MissingDataException
-     * @throws Exceptions\ValidationException
-     */
-    private function nullableArray(string $path, bool $nullable)
-    {
-        return $this->get($path, Type::ARRAY | ($nullable ? Type::NULL : 0));
     }
 
     /**
@@ -218,16 +205,10 @@ class Resolver implements Interfaces\Resolver
      * @throws Exceptions\MissingDataException
      * @throws Exceptions\ValidationException
      */
-    protected function hasOne(string $path, string $resolver, bool $nullable = false): ?Interfaces\Resolver
+    protected function hasOne(string $path, string $resolver, ...$args): ?Interfaces\Resolver
     {
-        return $this->remember($path, function() use ($path, $resolver, $nullable) {
-
-            /* Get either an array or null from the input at the given path. */
-            if (($delegate = $this->nullableArray($path, $nullable))) {
-                return new $resolver($delegate);
-            }
-
-            return $delegate;
+        return $this->remember($path, function() use ($path, $resolver, $args) {
+            return $resolver::resolve($this->get($path, Type::ARRAY));
         });
     }
 
@@ -243,18 +224,17 @@ class Resolver implements Interfaces\Resolver
      * @throws Exceptions\MissingDataException
      * @throws Exceptions\ValidationException
      */
-    protected function hasMany(string $path, string $resolver, bool $nullable = false): ?array
+    protected function hasMany(string $path, string $resolver, ...$args): ?array
     {
-        return $this->remember($path, function() use ($path, $resolver, $nullable) {
+        return $this->remember($path, function() use ($path, $resolver, $args) {
+            $collection = [];
 
-            /* Get either an array or null from the input at the given path. */
-            if (($delegate = $this->nullableArray($path, $nullable))) {
-                foreach ($delegate as $key => $input) {
-                    $collection[$key] = new $resolver($input);
-                }
+            /* */
+            foreach ($this->get($path, Type::ARRAY) as $key => $input) {
+                $collection[$key] = $resolver::resolve($input);
             }
 
-            return $collection ?? null;
+            return $collection ?? [];
         });
     }
 }

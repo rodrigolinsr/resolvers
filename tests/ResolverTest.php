@@ -53,7 +53,7 @@ class ResolverTest extends TestCase
 
     public function testBasicBehaviour()
     {
-        $resolver = new TestResolver([
+        $resolver = TestResolver::resolve([
             "a" => 1,
             "b" => [
                 "c" => "abc",
@@ -66,7 +66,7 @@ class ResolverTest extends TestCase
 
     public function testResolveHasOne()
     {
-        $resolver = new TestResolver([
+        $resolver = TestResolver::resolve([
             "ONE" => [
                 "a" => 1,
                 "b" => [
@@ -79,18 +79,9 @@ class ResolverTest extends TestCase
         $this->assertEquals("abc", $resolver->getOne()->getC());
     }
 
-    public function testResolveHasOneNullable()
-    {
-        $resolver = new TestResolver([
-            "ONE" => null,
-        ]);
-
-        $this->assertEquals(null, $resolver->getOne($nullable = true));
-    }
-
     public function testResolveHasMany()
     {
-        $resolver = new TestResolver([
+        $resolver = TestResolver::resolve([
             "MANY" => [
                 [
                     "a" => 1,
@@ -114,18 +105,9 @@ class ResolverTest extends TestCase
         $this->assertEquals("xyz", $resolver->getMany()[1]->getC());
     }
 
-    public function testResolveHasManyNullable()
-    {
-        $resolver = new TestResolver([
-            "MANY" => null,
-        ]);
-
-        $this->assertEquals(null, $resolver->getMany($nullable = true));
-    }
-
     public function testMissingData()
     {
-        $resolver = new TestResolver([
+        $resolver = TestResolver::resolve([
             "b" => [
                 "c" => 2
             ]
@@ -139,7 +121,7 @@ class ResolverTest extends TestCase
 
     public function testMissingDataNestedParent()
     {
-        $resolver = new TestResolver();
+        $resolver = TestResolver::resolve();
 
         $this->expectException(MissingDataException::class);
         $this->expectExceptionMessage("Missing input data for 'b.c' at 'b'");
@@ -149,7 +131,7 @@ class ResolverTest extends TestCase
 
     public function testMissingDataNestedChild()
     {
-        $resolver = new TestResolver([
+        $resolver = TestResolver::resolve([
             "b" => [],
         ]);
 
@@ -168,7 +150,7 @@ class ResolverTest extends TestCase
             ]
         ];
 
-        $resolver1 = new TestResolver($input);
+        $resolver1 = TestResolver::resolve($input);
 
         $resolver2 = $resolver1->with([
             "a" => 2,
@@ -221,7 +203,7 @@ class ResolverTest extends TestCase
     public function testGetDefault()
     {
         /* No data returns the default.*/
-        $resolver = new TestResolver();
+        $resolver = TestResolver::resolve();
         $this->assertEquals(42, $resolver->getD(42));
 
         /* Default ignored when data exists. */
@@ -234,6 +216,6 @@ class ResolverTest extends TestCase
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage("Unexpected value at 'a'");
 
-        (new TestResolver(["a" => "!"]))->getA();
+        (TestResolver::resolve(["a" => "!"]))->getA();
     }
 }
