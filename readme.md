@@ -21,7 +21,7 @@ composer require figured/resolvers
 
 ```php
 /* Example resolver implementation */
-class UserResolver extends Resolver
+class UserResolver extends Resolver implements UserInterface
 {
     public function getId(): ?int
     {
@@ -33,12 +33,12 @@ class UserResolver extends Resolver
         return $this->get("name", Type::STRING);
     }
     
-    public function getOrganisation(): ?OrgResolver
+    public function getOrganisation(): OrganisationInterface
     {
-        return $this->hasOne("org", OrgResolver::class, $nullable = true);
+        return $this->hasOne("org", OrganisationResolver::class);
     }
     
-    /** @return FarmResolver[] */
+    /** @return FarmInterface[] */
     public function getFarms(): array
     {
         return $this->hasMany("farms", FarmResolver::class);
@@ -59,15 +59,15 @@ $user = new UserResolver([
 ]);
 
 /* This should then become a common pattern. */
-$user = new UserResolver($request->all());
+$user = UserResolver::resolve([/* data */]);
 
 /* Do something with the user's farms. */
 foreach ($user->getFarms() as $farm) {
-    yield $farm->getName();
+    
 }
 
 /* Example of a price resolved as a decimal */
-class SaleResolver
+class SaleResolver implements SaleInterface
 {
     public function getPrice(): Decimal
     {
@@ -85,9 +85,32 @@ class SaleResolver
 }
 ```
 
-## Problem we are trying to solve...
+## The problem we are trying to solve...
 
-This was taken from the scenario cropping manager, which might not be the best example but it illustrates a real, common problem.
+We are trying to **map an array** (such as POST data, or test data) **to a domain entity interface**.
+
+For example, turn:
+
+```php
+$cropping->name          = $croppingData['name'];
+$cropping->crop_type_id  = $croppingData['crop_type'];
+$cropping->opening       = $croppingData['opening'] ?? 0;
+$cropping->opening_stock = $croppingData['opening_stock'] ?? 0;
+$cropping->opening_value = $croppingData['opening_value'] ?? 0;
+$cropping->scenario_id   = $this->scenario->id;
+```
+
+Into:
+
+```
+$cropping = CroppingResolver::of($croppingData)->with([
+    "scenario_id" => $this->scenario->id,
+]);
+```
+
+---
+
+Here is an example from the scenario cropping manager, which might not be the best example but it illustrates a real scenario.
 
 Things to look out for:
 - Direct array access with hard-coded string indices
@@ -161,7 +184,7 @@ Using resolvers, we can avoid:
 - Painful refactoring when keys or models change.
 
 ```php
-public function save(ScenarioCroppingResolver $input): ScenarioCropping
+public function save(ScenarioCroppingInterface $input): ScenarioCroppingInterface
 {
     $isNew = $input->getId() === null;
     
@@ -195,18 +218,20 @@ public function save(ScenarioCroppingResolver $input): ScenarioCropping
     return $model;
 }
 
-protected function renameAccount(ScenarioCroppingResolver $input, CropType $cropType)
+protected function renameAccount(ScenarioCroppingInterface $cropping, CropType $cropType)
 {
     $account = XeroAccount::where([
-        'accountid' => $input->getAccountId(),
-        'source_id' => $input->getScenarioId(),
+        'accountid' => $cropping->getAccountId(),
+        'source_id' => $cropping->getScenarioId(),
         'source'    => AccountsContract::SOURCE_SCENARIO,
     ]);
 
     if ($account->exists()) {
         $account->update([
-            'name' => $this->generateAccountName($scenarioCropping->cropType, $input->getName()),
+            'name' => $this->generateAccountName($scenarioCropping->cropType, $cropping->getName()),
         ]);
     }
 }
 ```
+
+---
